@@ -5,7 +5,6 @@ package cloudmgr
 
 import (
 	"flag"
-	"os"
 
 	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/cloud"
 )
@@ -22,11 +21,13 @@ func Get(name string) Cloud {
 	return cloudTable[name]
 }
 
-func defaultToEnv(field *string, env string, fallback ...string) {
-	if *field == "" {
-		*field = os.Getenv(env)
-		if *field == "" && len(fallback) > 0 {
-			*field = fallback[0]
-		}
+func List() []string {
+
+	var list []string
+
+	for name := range cloudTable {
+		list = append(list, name)
 	}
+
+	return list
 }

@@ -9,12 +9,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"crypto/sha256"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 
 	"github.com/confidential-containers/cloud-api-adaptor/test/utils"
@@ -129,7 +131,7 @@ func createVPC() error {
 	}
 	if foundVPC != nil {
 		IBMCloudProps.VpcID = *foundVPC.ID
-		log.Infof("VPC %s with ID %s exists alread", IBMCloudProps.VpcName, IBMCloudProps.VpcID)
+		log.Infof("VPC %s with ID %s exists already", IBMCloudProps.VpcName, IBMCloudProps.VpcID)
 	} else {
 		classicAccess := false
 		//manual := "manual"
@@ -206,13 +208,14 @@ func createPublicGateway(subnetID, vpcID string) error {
 		vpcIDentityModel,
 		zoneIdentityModel,
 	)
-
+	createPublicGatewayOptions.SetName(IBMCloudProps.PublicGatewayName)
+	log.Infof("Creating Public Gateway %s.", IBMCloudProps.PublicGatewayName)
 	publicGateway, _, err := IBMCloudProps.VPC.CreatePublicGateway(createPublicGatewayOptions)
 	if err != nil {
 		return err
 	}
 	IBMCloudProps.PublicGatewayID = *publicGateway.ID
-	log.Infof("Public Gatwway %s was created.", IBMCloudProps.PublicGatewayID)
+	log.Infof("Created Public Gateway with ID %s.", IBMCloudProps.PublicGatewayID)
 
 	options := &vpcv1.SetSubnetPublicGatewayOptions{}
 	options.SetID(subnetID)
@@ -223,7 +226,7 @@ func createPublicGateway(subnetID, vpcID string) error {
 	if err != nil {
 		return err
 	}
-	log.Infof("Public Gatwway %s was attached to Subnet %s.", IBMCloudProps.PublicGatewayID, subnetID)
+	log.Infof("Attached Public Gateway %s to Subnet %s.", IBMCloudProps.PublicGatewayID, subnetID)
 	return nil
 }
 
@@ -236,7 +239,7 @@ func deletePublicGateway(subnetID, publicGatewayID string) error {
 	if err != nil {
 		return err
 	}
-	log.Infof("Public Gatwway %s was unattached from Subnet %s.", publicGatewayID, subnetID)
+	log.Infof("Public Gateway %s was unattached from Subnet %s.", publicGatewayID, subnetID)
 
 	deleteOptions := &vpcv1.DeletePublicGatewayOptions{}
 	deleteOptions.SetID(publicGatewayID)
@@ -244,7 +247,7 @@ func deletePublicGateway(subnetID, publicGatewayID string) error {
 	if err != nil {
 		return err
 	}
-	log.Infof("Public Gatwway %s was deleted.", publicGatewayID)
+	log.Infof("Public Gateway %s was deleted.", publicGatewayID)
 
 	return nil
 }
@@ -318,6 +321,35 @@ func createSubnet() error {
 	return nil
 }
 
+// TODO, nice to have retry if SDK client did not do that for well known http errors
+func findAttachedLoadBalancer(subnetName string) (*vpcv1.LoadBalancer, error) {
+	options := &vpcv1.ListLoadBalancersOptions{}
+
+	pager, err := IBMCloudProps.VPC.NewLoadBalancersPager(options)
+	if err != nil {
+		return nil, err
+	}
+
+	var allResults []vpcv1.LoadBalancer
+	for pager.HasNext() {
+		nextPage, err := pager.GetNext()
+		if err != nil {
+			return nil, err
+		}
+		allResults = append(allResults, nextPage...)
+	}
+
+	for _, loadBalancer := range allResults {
+		log.Tracef("Checking loadBalancer %s.", *loadBalancer.Name)
+		for _, subnet := range loadBalancer.Subnets {
+			if *subnet.Name == subnetName {
+				return &loadBalancer, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
 func deleteSubnet() error {
 	foundSubnet, err := findSubnet(IBMCloudProps.SubnetName)
 	if err != nil {
@@ -338,6 +370,20 @@ func deleteSubnet() error {
 			log.Warnf("Failed to delete PublicGateway %s.", *gateway.ID)
 			return err
 		}
+	}
+
+	// Waiting the attached Load Balancers to be removed
+	waitMinutes := 5
+	log.Infof("Waiting for attached LoadBalancers to be removed from %s ...", IBMCloudProps.SubnetName)
+	for i := 0; i <= waitMinutes; i++ {
+		foundlb, _ := findAttachedLoadBalancer(IBMCloudProps.SubnetName)
+		if foundlb == nil {
+			log.Infof("All attached LoadBalancers are removed from %s ...", IBMCloudProps.SubnetName)
+			break
+		}
+		log.Infof("Waiting for attached LoadBalancer %s to be removed.", *foundlb.Name)
+		log.Infof("Waited %d minutes...", i)
+		time.Sleep(60 * time.Second)
 	}
 
 	options := &vpcv1.DeleteSubnetOptions{}
@@ -707,6 +753,48 @@ func (p *IBMCloudProvisioner) DeleteVPC(ctx context.Context, cfg *envconf.Config
 	return deleteVpcImpl()
 }
 
+// TODO, nice to have retry if SDK client did not do that for well known http errors
+func findImage(imageName string) (*vpcv1.Image, error) {
+	listImagesOptions := &vpcv1.ListImagesOptions{}
+	listImagesOptions.SetVisibility("private")
+
+	pager, err := IBMCloudProps.VPC.NewImagesPager(listImagesOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	var allResults []vpcv1.Image
+	for pager.HasNext() {
+		nextPage, err := pager.GetNext()
+		if err != nil {
+			return nil, err
+		}
+		allResults = append(allResults, nextPage...)
+	}
+	for _, image := range allResults {
+		log.Tracef("Checking Image %s.", *image.Name)
+		if *image.Name == imageName {
+			return &image, nil
+		}
+	}
+	return nil, nil
+}
+
+func getSha256sum(imagePath string) (string, error) {
+	file, err := os.Open(imagePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	sum := hash.Sum(nil)
+	return fmt.Sprintf("%x", sum), nil
+}
+
 func (p *IBMCloudProvisioner) UploadPodvm(imagePath string, ctx context.Context, cfg *envconf.Config) error {
 	log.Trace("UploadPodvm()")
 
@@ -722,7 +810,13 @@ func (p *IBMCloudProvisioner) UploadPodvm(imagePath string, ctx context.Context,
 		WithS3ForcePathStyle(true)
 
 	sess := cosession.Must(cosession.NewSession(conf))
-	log.Info("session initialized.")
+	log.Info("cos session initialized.")
+
+	newImageSha256sum, err := getSha256sum(imagePath)
+
+	if err != nil {
+		return err
+	}
 
 	file, err := os.Open(imagePath)
 	if err != nil {
@@ -732,12 +826,50 @@ func (p *IBMCloudProvisioner) UploadPodvm(imagePath string, ctx context.Context,
 	if err != nil {
 		return err
 	}
-	log.Infof("qcow2 image file %s validated.", imagePath)
+	log.Infof("qcow2 image file %s validated, sha256sum: %s.", imagePath, newImageSha256sum)
+
+	key := filepath.Base(filePath)
+	imageName := strings.TrimSuffix(key, filepath.Ext(key))
+
+	existImage, err := findImage(imageName)
+	if err != nil {
+		return err
+	}
+	if existImage != nil {
+		if newImageSha256sum == *existImage.File.Checksums.Sha256 {
+			IBMCloudProps.PodvmImageID = *existImage.ID
+			log.Infof("Found exist image %s with same content, PodvmImageID %s, sha256sum: %s.", key, IBMCloudProps.PodvmImageID, *existImage.File.Checksums.Sha256)
+			return nil
+		} else {
+			log.Infof("Found exist image %s, sha256sum: %s with old content deleting it ...", imageName, *existImage.File.Checksums.Sha256)
+			deleteOptions := &vpcv1.DeleteImageOptions{}
+			deleteOptions.SetID(*existImage.ID)
+			_, err := IBMCloudProps.VPC.DeleteImage(deleteOptions)
+			if err != nil {
+				return err
+			}
+			// Waiting the old image to be removed
+			waitMinutes := 5
+			log.Infof("Waiting for exist image with PodvmImageID %s to be removed.", *existImage.ID)
+			for i := 0; i <= waitMinutes; i++ {
+				foundImage, _ := findImage(imageName)
+				if foundImage == nil {
+					log.Infof("The exist image with PodvmImageID %s is removed.", *existImage.ID)
+					break
+				}
+				log.Infof("Waited %d minutes...", i)
+				time.Sleep(60 * time.Second)
+			}
+		}
+	}
+
+	hide_progress := os.Getenv("HIDE_UPLOADER_PROGRESS")
 
 	reader := &utils.CustomReader{
-		Fp:      file,
-		Size:    fileInfo.Size(),
-		SignMap: map[int64]struct{}{},
+		Fp:           file,
+		Size:         fileInfo.Size(),
+		SignMap:      map[int64]struct{}{},
+		HideProgress: hide_progress,
 	}
 
 	uploader := s3manager.NewUploader(sess, func(u *s3manager.Uploader) {
@@ -745,7 +877,6 @@ func (p *IBMCloudProvisioner) UploadPodvm(imagePath string, ctx context.Context,
 		u.LeavePartsOnError = true
 	})
 
-	key := filepath.Base(filePath)
 	_, err = uploader.Upload(&s3manager.UploadInput{
 		Bucket: aws.String(IBMCloudProps.Bucket),
 		Key:    aws.String(key),
@@ -768,7 +899,7 @@ func (p *IBMCloudProvisioner) UploadPodvm(imagePath string, ctx context.Context,
 	}
 
 	cosID := "cos://" + IBMCloudProps.Region + "/" + IBMCloudProps.Bucket + "/" + key
-	imageName := strings.TrimSuffix(key, filepath.Ext(key))
+
 	options := &vpcv1.CreateImageOptions{}
 	options.SetImagePrototype(&vpcv1.ImagePrototype{
 		Name: &imageName,
@@ -783,14 +914,13 @@ func (p *IBMCloudProvisioner) UploadPodvm(imagePath string, ctx context.Context,
 		return err
 	}
 	IBMCloudProps.PodvmImageID = *image.ID
-	log.Infof("Image %s with PodvmImageID %s created from the bucket.", key, IBMCloudProps.PodvmImageID)
-
+	log.Infof("Image %s with PodvmImageID %s created from the bucket.", imageName, IBMCloudProps.PodvmImageID)
 	return nil
 }
 
 func (p *IBMCloudProvisioner) GetProperties(ctx context.Context, cfg *envconf.Config) map[string]string {
 	return map[string]string{
-		"CLOUD_PROVIDER":                       "ibmcloud",
+		"CLOUD_PROVIDER":                       IBMCloudProps.IBMCloudProvider,
 		"IBMCLOUD_VPC_ENDPOINT":                IBMCloudProps.VpcServiceURL,
 		"IBMCLOUD_RESOURCE_GROUP_ID":           IBMCloudProps.ResourceGroupID,
 		"IBMCLOUD_SSH_KEY_ID":                  IBMCloudProps.SshKeyID,

@@ -14,10 +14,10 @@ $(IMAGE_FILE): $(BINARIES) $(FILES)
 		-var client_secret=${CLIENT_SECRET} \
 		-var subscription_id=${SUBSCRIPTION_ID} \
 		-var tenant_id=${TENANT_ID} \
-		-var location=${LOCATION} \
 		-var vm_size=${VM_SIZE} \
 		-var resource_group=${RESOURCE_GROUP} \
-		-var az_image_name=${IMAGE_NAME} .
+		-var az_image_name=${IMAGE_NAME} \
+		-var ssh_username=${SSH_USERNAME} .
 	rm -fr toupload
 
 clean:

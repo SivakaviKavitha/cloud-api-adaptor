@@ -16,6 +16,7 @@ import (
 	nodev1 "k8s.io/api/node/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	"sigs.k8s.io/e2e-framework/klient/decoder"
 	"sigs.k8s.io/e2e-framework/klient/k8s"
 	"sigs.k8s.io/e2e-framework/klient/wait"
@@ -192,8 +193,8 @@ func (p *CloudAPIAdaptor) Deploy(ctx context.Context, cfg *envconf.Config, props
 
 	// Wait for the CoCo installer and CAA pods be ready
 	daemonSetList := map[*appsv1.DaemonSet]time.Duration{
-		p.ccDaemonSet:  time.Minute * 10,
-		p.caaDaemonSet: time.Minute * 5,
+		p.ccDaemonSet:  time.Minute * 15,
+		p.caaDaemonSet: time.Minute * 10,
 	}
 
 	for ds, timeout := range daemonSetList {
@@ -222,7 +223,7 @@ func (p *CloudAPIAdaptor) Deploy(ctx context.Context, cfg *envconf.Config, props
 
 	fmt.Printf("Wait for the %s runtimeclass be created\n", p.runtimeClass.GetName())
 	if err = wait.For(conditions.New(resources).ResourcesFound(&nodev1.RuntimeClassList{Items: []nodev1.RuntimeClass{*p.runtimeClass}}),
-		wait.WithTimeout(time.Second*20)); err != nil {
+		wait.WithTimeout(time.Second*60)); err != nil {
 		return err
 	}
 

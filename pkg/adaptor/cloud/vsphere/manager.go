@@ -1,26 +1,19 @@
-//go:build vsphere
-
 // (C) Copyright Confidential Containers Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-package cloudmgr
+package vsphere
 
 import (
 	"flag"
 
 	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/cloud"
-	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/cloud/vsphere"
 )
 
-func init() {
-	cloudTable["vsphere"] = &vsphereMgr{}
-}
+var vspherecfg Config
 
-var vspherecfg vsphere.Config
+type Manager struct{}
 
-type vsphereMgr struct{}
-
-func (_ *vsphereMgr) ParseCmd(flags *flag.FlagSet) {
+func (_ *Manager) ParseCmd(flags *flag.FlagSet) {
 
 	flags.StringVar(&vspherecfg.VcenterURL, "vcenter-url", "", "URL of vCenter instance to connect to")
 	flags.StringVar(&vspherecfg.UserName, "user-name", "", "vCenter Username")
@@ -35,12 +28,12 @@ func (_ *vsphereMgr) ParseCmd(flags *flag.FlagSet) {
 	flags.StringVar(&vspherecfg.Host, "host", "", "vCenter host name of resource pool destination")
 }
 
-func (_ *vsphereMgr) LoadEnv() {
-	defaultToEnv(&vspherecfg.UserName, "GOVC_USERNAME")
-	defaultToEnv(&vspherecfg.Password, "GOVC_PASSWORD")
-	defaultToEnv(&vspherecfg.Thumbprint, "GOVC_THUMBPRINT")
+func (_ *Manager) LoadEnv() {
+	cloud.DefaultToEnv(&vspherecfg.UserName, "GOVC_USERNAME", "")
+	cloud.DefaultToEnv(&vspherecfg.Password, "GOVC_PASSWORD", "")
+	cloud.DefaultToEnv(&vspherecfg.Thumbprint, "GOVC_THUMBPRINT", "")
 }
 
-func (_ *vsphereMgr) NewProvider() (cloud.Provider, error) {
-	return vsphere.NewProvider(&vspherecfg)
+func (_ *Manager) NewProvider() (cloud.Provider, error) {
+	return NewProvider(&vspherecfg)
 }

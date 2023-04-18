@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
 
-const WAIT_POD_RUNNING_TIMEOUT = time.Second * 180
+const WAIT_POD_RUNNING_TIMEOUT = time.Second * 300
 
 // doTestCreateSimplePod tests a simple peer-pod can be created.
 func doTestCreateSimplePod(t *testing.T, assert CloudAssert) {

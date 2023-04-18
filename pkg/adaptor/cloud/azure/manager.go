@@ -1,26 +1,19 @@
-//go:build azure
-
 // (C) Copyright Confidential Containers Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-package cloudmgr
+package azure
 
 import (
 	"flag"
 
 	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/cloud"
-	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/cloud/azure"
 )
 
-func init() {
-	cloudTable["azure"] = &azureMgr{}
-}
+var azurecfg Config
 
-var azurecfg azure.Config
+type Manager struct{}
 
-type azureMgr struct{}
-
-func (_ *azureMgr) ParseCmd(flags *flag.FlagSet) {
+func (_ *Manager) ParseCmd(flags *flag.FlagSet) {
 	flags.StringVar(&azurecfg.ClientId, "clientid", "", "Client Id, defaults to `AZURE_CLIENT_ID`")
 	flags.StringVar(&azurecfg.ClientSecret, "secret", "", "Client Secret, defaults to `AZURE_CLIENT_SECRET`")
 	flags.StringVar(&azurecfg.TenantId, "tenantid", "", "Tenant Id, defaults to `AZURE_TENANT_ID`")
@@ -33,15 +26,17 @@ func (_ *azureMgr) ParseCmd(flags *flag.FlagSet) {
 	flags.StringVar(&azurecfg.ImageId, "imageid", "", "Image Id")
 	flags.StringVar(&azurecfg.SubscriptionId, "subscriptionid", "", "Subscription ID")
 	flags.StringVar(&azurecfg.SSHKeyPath, "ssh-key-path", "$HOME/.ssh/id_rsa.pub", "Path to SSH public key")
+	flags.StringVar(&azurecfg.SSHUserName, "ssh-username", "peerpod", "SSH User Name")
 }
 
-func (_ *azureMgr) LoadEnv() {
-	defaultToEnv(&azurecfg.ClientId, "AZURE_CLIENT_ID")
-	defaultToEnv(&azurecfg.ClientSecret, "AZURE_CLIENT_SECRET")
-	defaultToEnv(&azurecfg.TenantId, "AZURE_TENANT_ID")
-
+func (_ *Manager) LoadEnv() {
+	cloud.DefaultToEnv(&azurecfg.ClientId, "AZURE_CLIENT_ID", "")
+	cloud.DefaultToEnv(&azurecfg.ClientSecret, "AZURE_CLIENT_SECRET", "")
+	cloud.DefaultToEnv(&azurecfg.TenantId, "AZURE_TENANT_ID", "")
+	cloud.DefaultToEnv(&azurecfg.SubscriptionId, "AZURE_SUBSCRIPTION_ID", "")
+	cloud.DefaultToEnv(&azurecfg.Region, "AZURE_REGION", "")
 }
 
-func (_ *azureMgr) NewProvider() (cloud.Provider, error) {
-	return azure.NewProvider(&azurecfg)
+func (_ *Manager) NewProvider() (cloud.Provider, error) {
+	return NewProvider(&azurecfg)
 }

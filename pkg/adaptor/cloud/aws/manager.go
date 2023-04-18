@@ -1,26 +1,19 @@
-//go:build aws
-
 // (C) Copyright Confidential Containers Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-package cloudmgr
+package aws
 
 import (
 	"flag"
 
 	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/cloud"
-	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/cloud/aws"
 )
 
-func init() {
-	cloudTable["aws"] = &awsMgr{}
-}
+var awscfg Config
 
-var awscfg aws.Config
+type Manager struct{}
 
-type awsMgr struct{}
-
-func (_ *awsMgr) ParseCmd(flags *flag.FlagSet) {
+func (_ *Manager) ParseCmd(flags *flag.FlagSet) {
 
 	flags.StringVar(&awscfg.AccessKeyId, "aws-access-key-id", "", "Access Key ID, defaults to `AWS_ACCESS_KEY_ID`")
 	flags.StringVar(&awscfg.SecretKey, "aws-secret-key", "", "Secret Key, defaults to `AWS_SECRET_ACCESS_KEY`")
@@ -36,12 +29,12 @@ func (_ *awsMgr) ParseCmd(flags *flag.FlagSet) {
 
 }
 
-func (_ *awsMgr) LoadEnv() {
-	defaultToEnv(&awscfg.AccessKeyId, "AWS_ACCESS_KEY_ID")
-	defaultToEnv(&awscfg.SecretKey, "AWS_SECRET_ACCESS_KEY")
+func (_ *Manager) LoadEnv() {
+	cloud.DefaultToEnv(&awscfg.AccessKeyId, "AWS_ACCESS_KEY_ID", "")
+	cloud.DefaultToEnv(&awscfg.SecretKey, "AWS_SECRET_ACCESS_KEY", "")
 
 }
 
-func (_ *awsMgr) NewProvider() (cloud.Provider, error) {
-	return aws.NewProvider(&awscfg)
+func (_ *Manager) NewProvider() (cloud.Provider, error) {
+	return NewProvider(&awscfg)
 }

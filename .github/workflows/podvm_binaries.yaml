@@ -1,26 +1,28 @@
-name: Create Pod VM Builder Image
+name: Create Pod VM Binaries Image
 on:
-  release:
-    types: [created]
+  workflow_run:
+    workflows: ["Create Pod VM Builder Image"]
+    types:
+      - completed
 
 jobs:
   build:
-    name: Create pod vm builder image
-    runs-on: ${{ matrix.runner }}
+    name: Create pod vm binaries image
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os:
-          # Please keep this list in alphabetical order.
-          - centos
-          - ubuntu
+        os: [centos, ubuntu]
+        arch: [amd64, s390x]
         include:
           - os: centos
-            dockerfile: Dockerfile.podvm_builder.centos
+            dockerfile: Dockerfile.podvm_binaries.centos
           - os: ubuntu
-            dockerfile: Dockerfile.podvm_builder
-        runner:
-          - ubuntu-latest
+            dockerfile: Dockerfile.podvm_binaries
+        exclude:
+          - os: centos
+            arch: s390x
     steps:
     - name: Checkout Code
       uses: actions/checkout@v3
@@ -49,18 +51,14 @@ jobs:
       uses: docker/build-push-action@v3
       with:
         tags: |
-          quay.io/confidential-containers/podvm-builder-${{ matrix.os }}:latest
-          quay.io/confidential-containers/podvm-builder-${{ matrix.os }}:${{ github.sha }}
+          quay.io/confidential-containers/podvm-binaries-${{ matrix.os }}-${{ matrix.arch }}:latest
+          quay.io/confidential-containers/podvm-binaries-${{ matrix.os }}-${{ matrix.arch }}:${{ github.sha }}
         push: true
         context: podvm
         platforms: linux/amd64
         file: |
           podvm/${{ matrix.dockerfile }}
         build-args: |
-          "GO_VERSION=1.19.6"
-          "PROTOC_VERSION=3.11.4"
-          "RUST_VERSION=1.66.0"
-          "CAA_SRC=https://github.com/confidential-containers/cloud-api-adaptor"
-          "CAA_SRC_BRANCH=staging"
-          "KATA_SRC=https://github.com/kata-containers/kata-containers"
-          "KATA_SRC_BRANCH=CC-0.5.0"
+          "ARCH=${{ matrix.arch }}"
+          "UBUNTU_IMAGE_URL="
+          "UBUNTU_IMAGE_CHECKSUM="

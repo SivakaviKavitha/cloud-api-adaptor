@@ -1,26 +1,19 @@
-//go:build ibmcloud
-
 // (C) Copyright Confidential Containers Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-package cloudmgr
+package ibmcloud
 
 import (
 	"flag"
 
 	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/cloud"
-	"github.com/confidential-containers/cloud-api-adaptor/pkg/adaptor/cloud/ibmcloud"
 )
 
-func init() {
-	cloudTable["ibmcloud"] = &ibmcloudMgr{}
-}
+var ibmcloudConfig Config
 
-var ibmcloudConfig ibmcloud.Config
+type Manager struct{}
 
-type ibmcloudMgr struct{}
-
-func (_ *ibmcloudMgr) ParseCmd(flags *flag.FlagSet) {
+func (_ *Manager) ParseCmd(flags *flag.FlagSet) {
 
 	flags.StringVar(&ibmcloudConfig.ApiKey, "api-key", "", "IBM Cloud API key, defaults to `IBMCLOUD_API_KEY`")
 	flags.StringVar(&ibmcloudConfig.IamServiceURL, "iam-service-url", "https://iam.cloud.ibm.com/identity/token", "IBM Cloud IAM Service URL")
@@ -38,10 +31,10 @@ func (_ *ibmcloudMgr) ParseCmd(flags *flag.FlagSet) {
 
 }
 
-func (_ *ibmcloudMgr) LoadEnv() {
-	defaultToEnv(&ibmcloudConfig.ApiKey, "IBMCLOUD_API_KEY")
+func (_ *Manager) LoadEnv() {
+	cloud.DefaultToEnv(&ibmcloudConfig.ApiKey, "IBMCLOUD_API_KEY", "")
 }
 
-func (_ *ibmcloudMgr) NewProvider() (cloud.Provider, error) {
-	return ibmcloud.NewProvider(&ibmcloudConfig)
+func (_ *Manager) NewProvider() (cloud.Provider, error) {
+	return NewProvider(&ibmcloudConfig)
 }
