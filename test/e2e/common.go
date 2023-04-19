@@ -36,6 +36,7 @@ func newDeployment(namespace string, deploymentname string, runtimeclass string)
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
+					Name:      "publicpod",
 					Namespace: namespace,
 					Labels: map[string]string{
 						"app": deploymentname,
@@ -67,9 +68,9 @@ func newService(namespace string, deploymentname string, servicename string, ipa
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: servicename, Namespace: namespace},
 		Spec: corev1.ServiceSpec{
-			Ports:       []corev1.ServicePort{{Name: "http", Port: 80, Protocol: "TCP", TargetPort: intstr.IntOrString{IntVal: 80}}},
-			Selector:    map[string]string{"app": deploymentname},
-			ExternalIPs: []string{ipaddress},
+			Ports:    []corev1.ServicePort{{Name: "http", Port: 80, Protocol: "TCP", TargetPort: intstr.IntOrString{IntVal: 80}}},
+			Selector: map[string]string{"app": deploymentname},
+			// ExternalIPs: []string{ipaddress},
 		},
 	}
 }

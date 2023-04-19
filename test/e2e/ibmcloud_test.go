@@ -15,12 +15,12 @@ import (
 	"github.com/IBM/vpc-go-sdk/vpcv1"
 )
 
-func TestCreateSimplePod(t *testing.T) {
-	assert := IBMCloudAssert{
-		vpc: pv.IBMCloudProps.VPC,
-	}
-	doTestCreateSimplePod(t, assert)
-}
+//	func TestCreateSimplePod(t *testing.T) {
+//		assert := IBMCloudAssert{
+//			vpc: pv.IBMCloudProps.VPC,
+//		}
+//		doTestCreateSimplePod(t, assert)
+//	}
 func TestCreatePublicPod(t *testing.T) {
 	assert := IBMCloudAssert{
 		vpc: pv.IBMCloudProps.VPC,

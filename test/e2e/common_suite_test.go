@@ -62,9 +62,10 @@ func doTestCreatePublicPod(t *testing.T, assert CloudAssert) {
 	// TODO: generate me.
 	namespace := "default"
 	deploymentname := "nginx"
-	podname := "public-pod"
+	podname := "publicpod-test"
 	servicename := "nginx-service"
 	ipaddress := "8.8.8.8"
+	pod := newPod(namespace, podname, podname, "kata")
 	deployment := newDeployment(namespace, deploymentname, "kata")
 	service := newService(namespace, deploymentname, servicename, ipaddress)
 	PublipodFeature := features.New("Public Pod").
@@ -76,10 +77,13 @@ func doTestCreatePublicPod(t *testing.T, assert CloudAssert) {
 			if err = client.Resources(namespace).Create(ctx, deployment); err != nil {
 				t.Fatal(err)
 			}
+			if err = client.Resources(namespace).Create(ctx, pod); err != nil {
+				t.Fatal(err)
+			}
 			if err = client.Resources(namespace).Create(ctx, service); err != nil {
 				t.Fatal(err)
 			}
-			if err = wait.For(conditions.New(client.Resources()).PodRunning(deployment), wait.WithTimeout(WAIT_POD_RUNNING_TIMEOUT)); err != nil {
+			if err = wait.For(conditions.New(client.Resources()).PodRunning(pod), wait.WithTimeout(WAIT_POD_RUNNING_TIMEOUT)); err != nil {
 				t.Fatal(err)
 			}
 
@@ -100,6 +104,9 @@ func doTestCreatePublicPod(t *testing.T, assert CloudAssert) {
 				t.Fatal(err)
 			}
 			if err = client.Resources().Delete(ctx, deployment); err != nil {
+				t.Fatal(err)
+			}
+			if err = client.Resources().Delete(ctx, service); err != nil {
 				t.Fatal(err)
 			}
 
